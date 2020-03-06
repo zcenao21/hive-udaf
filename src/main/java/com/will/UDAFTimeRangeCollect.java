@@ -24,17 +24,24 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
+/*
+ * time: 20200307
+ * functionality: collect events of target time range
+ * author: will
+ * email: zcenao21@gmail.com
+ */
 public class UDAFTimeRangeCollect extends AbstractGenericUDAFResolver {
     static final Logger LOG = LoggerFactory.getLogger(UDAFTimeRangeCollect.class.getName());
 
     @Override
     public GenericUDAFEvaluator getEvaluator(TypeInfo[] parameters) throws SemanticException {
 
-        //判断参数个数
+        //judge parameter number, if not equals to 3, then throw exception
         if (parameters.length != 3) {
             throw new UDFArgumentTypeException(parameters.length - 1, "Three argument is excepted.");
         }
 
+        //judge parameter type. They should be long, string, string
         ObjectInspector oiKey = TypeInfoUtils.getStandardJavaObjectInspectorFromTypeInfo(parameters[0]);
         ObjectInspector oiValue = TypeInfoUtils.getStandardJavaObjectInspectorFromTypeInfo(parameters[1]);
         ObjectInspector oiTimeStr = TypeInfoUtils.getStandardJavaObjectInspectorFromTypeInfo(parameters[2]);
@@ -44,7 +51,6 @@ public class UDAFTimeRangeCollect extends AbstractGenericUDAFResolver {
             throw new UDFArgumentTypeException(0, "Argument must be PRIMITIVE");
         }
 
-        //判断参数类型
         PrimitiveObjectInspector inputKeyOI = (PrimitiveObjectInspector) oiKey;
         PrimitiveObjectInspector inputValueOI = (PrimitiveObjectInspector) oiValue;
         PrimitiveObjectInspector inputTimeStrOI = (PrimitiveObjectInspector) oiValue;
@@ -76,6 +82,9 @@ public class UDAFTimeRangeCollect extends AbstractGenericUDAFResolver {
         public ObjectInspector init(Mode m, ObjectInspector[] parameters) throws HiveException{
             super.init(m, parameters);
 
+            //input:
+            //for partial1 and complete stage, parameter should contains three
+            //elements. For partial2 and final, we use string list
             if (m == Mode.PARTIAL1||m==Mode.COMPLETE) {
                 assert(parameters.length == 3);
                 inputTimeStampOI = (PrimitiveObjectInspector) parameters[0];
@@ -85,11 +94,12 @@ public class UDAFTimeRangeCollect extends AbstractGenericUDAFResolver {
                 lOI=(ListObjectInspector)parameters[0];
             }
 
+            //output:
+            //string list. For timestamp input, we first transform it as string
             return ObjectInspectorFactory.getStandardListObjectInspector(
                     PrimitiveObjectInspectorFactory.writableStringObjectInspector);
         }
 
-        @AggregationType(estimable = true)
         static class MKArrayAggregationBuffer extends AbstractAggregationBuffer {
             TimeArrayModel timeArrayModel;
         }
@@ -108,10 +118,12 @@ public class UDAFTimeRangeCollect extends AbstractGenericUDAFResolver {
 
         public void iterate(AggregationBuffer agg, Object[] parameters) throws HiveException {
             assert (parameters.length == 3);
+            //all parameters should not be null
             if (parameters[0] == null || parameters[1] == null ||parameters[2] == null) {
                 return;
             }
             MKArrayAggregationBuffer myagg = (MKArrayAggregationBuffer) agg;
+            //if not inited yet, then set it
             if(!myagg.timeArrayModel.isInit()){
                 Text timeString = new Text(PrimitiveObjectInspectorUtils.getString(parameters[2], inputTimeOI));
                 if(timeString.getLength()<1) {
@@ -155,6 +167,8 @@ public class UDAFTimeRangeCollect extends AbstractGenericUDAFResolver {
             List<Map.Entry<Text, Text>> listData = Lists.newArrayList(map.entrySet());
             ArrayList<Text> result = new ArrayList<Text>();
             result.add(my_agg.timeArrayModel.getTime());
+
+            //time range logic
             for (Map.Entry<Text, Text> entry : listData) {
                 Long timestamp=Long.parseLong(entry.getKey().toString());
                 Long timeInterval = (mytime.getMillis() - timestamp) / (3600000*24);
