@@ -1,8 +1,3 @@
-/*
- * hexo 博客
- * 实现统计半小时内的数据
- */
-
 package com.will;
 
 import com.google.common.collect.Lists;
